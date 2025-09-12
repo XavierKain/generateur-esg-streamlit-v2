@@ -18,6 +18,7 @@ import pandas as pd
 from openpyxl import load_workbook
 import warnings
 from xlwings_generator import XLWingsGenerator
+from xlwings_remote_api import create_xlwings_remote_interface
 
 # Configuration de la page
 st.set_page_config(
@@ -442,6 +443,36 @@ def page_generation_execute():
     - 📊 Questionnaires sélectionnés: `{selected_count}`
     """)
     
+    # Mode de génération
+    st.markdown("### 🔧 Mode de génération")
+    generation_mode = st.radio(
+        "Choisissez le mode de génération :",
+        options=["standard", "xlwings_distant"],
+        format_func=lambda x: {
+            "standard": "🔧 Standard (openpyxl - compatible cloud)",
+            "xlwings_distant": "🚀 xlwings distant (formatage conditionnel préservé)"
+        }[x],
+        help="Mode standard: compatible avec Streamlit Cloud mais sans formatage conditionnel. Mode xlwings distant: utilise Excel local pour préserver le formatage."
+    )
+    
+    # Interface xlwings distant si sélectionné
+    if generation_mode == "xlwings_distant" and selected_count > 0:
+        st.markdown("---")
+        
+        # Préparer les données pour xlwings distant
+        questionnaires_data = prepare_questionnaires_data_for_remote()
+        
+        # Lire le contenu du template
+        with open(st.session_state.uploaded_template_file, 'rb') as f:
+            template_content = f.read()
+        
+        template_filename = os.path.basename(st.session_state.uploaded_template_file)
+        
+        # Interface xlwings distant
+        create_xlwings_remote_interface(questionnaires_data, template_content, template_filename)
+        
+        return  # Sortir de la fonction pour éviter d'afficher le bouton standard
+    
     # Afficher les résultats si la génération a déjà été faite
     if st.session_state.generated_questionnaires and st.session_state.generation_result:
         display_generation_results()
@@ -701,6 +732,24 @@ def update_progress(progress_bar, status_text, current, total, message):
     progress = current / total if total > 0 else 0
     progress_bar.progress(progress)
     status_text.text(f"{message} ({current}/{total})")
+
+def prepare_questionnaires_data_for_remote():
+    """Prépare les données pour le traitement xlwings distant"""
+    try:
+        from generateur_2025_streamlit import prepare_questionnaires_data_for_remote_xlwings
+        
+        bdd_file = st.session_state.uploaded_bdd_file
+        year = st.session_state.selected_year
+        selected_indices = st.session_state.selected_questionnaire_indices
+        
+        # Préparer les données
+        questionnaires_data = prepare_questionnaires_data_for_remote_xlwings(bdd_file, year, selected_indices)
+        
+        return questionnaires_data
+        
+    except Exception as e:
+        st.error(f"Erreur lors de la préparation des données: {e}")
+        return []
 
 if __name__ == "__main__":
     main()

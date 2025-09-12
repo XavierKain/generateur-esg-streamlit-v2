@@ -908,3 +908,78 @@ def generate_selected_questionnaires_to_zip(bdd_file, year, template_file, selec
         
     except Exception as e:
         return {'success': False, 'error': str(e)}
+
+
+def prepare_questionnaires_data_for_remote_xlwings(bdd_file, year, selected_indices):
+    """
+    Prépare les données des questionnaires sélectionnés pour le traitement xlwings distant.
+    
+    Args:
+        bdd_file: Chemin vers le fichier BDD Excel
+        year: Année à traiter
+        selected_indices: Liste des indices sélectionnés
+        
+    Returns:
+        Liste des dictionnaires avec les données de chaque questionnaire
+    """
+    try:
+        wb = load_workbook(bdd_file, data_only=True)
+        
+        if year not in wb.sheetnames:
+            raise ValueError(f"Année {year} non trouvée dans le fichier BDD")
+        
+        ws = wb[year]
+        questionnaires_data = []
+        
+        # Traiter chaque indice sélectionné
+        for idx in selected_indices:
+            row_num = idx + 10  # Ajustement pour la ligne réelle (les données commencent à la ligne 10)
+            
+            # Vérifier que la ligne existe
+            if row_num > ws.max_row:
+                continue
+            
+            # Nom du dossier (colonne O = 15)
+            folder_name = ws.cell(row=row_num, column=15).value
+            if not folder_name or str(folder_name).strip() == '':
+                continue
+            
+            entreprise = str(folder_name).strip()
+            
+            # Extraire toutes les données de la ligne
+            data_list = []
+            
+            # Colonnes de données (R à BY) = colonnes 18 à 77
+            for col in range(18, 78):  # 18 à 77 inclus
+                cell_value = ws.cell(row=row_num, column=col).value
+                
+                # Déterminer le type de données
+                if col in [18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48, 50, 52, 54, 56, 58, 60, 62, 64, 66, 68, 70, 72, 74, 76]:  # Colonnes "réalisées" (paires)
+                    data_type = 'valeur_realisee'
+                    target_row = ((col - 18) // 2) * 3 + 105  # Calcul de la ligne cible
+                elif col in [19, 21, 23, 25, 27, 29, 31, 33, 35, 37, 39, 41, 43, 45, 47, 49, 51, 53, 55, 57, 59, 61, 63, 65, 67, 69, 71, 73, 75, 77]:  # Colonnes "cibles" (impaires)
+                    data_type = 'valeur_cible'
+                    target_row = ((col - 19) // 2) * 3 + 106  # Calcul de la ligne cible
+                else:
+                    continue
+                
+                # Ajouter les données si la valeur n'est pas vide
+                if cell_value is not None and str(cell_value).strip() != '':
+                    data_list.append({
+                        'row': target_row,
+                        data_type: cell_value,
+                        'commentaire': ''  # Les commentaires peuvent être ajoutés plus tard
+                    })
+            
+            # Ajouter le questionnaire aux données
+            questionnaires_data.append({
+                'entreprise': entreprise,
+                'year': year,
+                'data': data_list
+            })
+        
+        wb.close()
+        return questionnaires_data
+        
+    except Exception as e:
+        raise Exception(f"Erreur lors de la préparation des données pour xlwings distant: {e}")
