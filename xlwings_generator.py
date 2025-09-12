@@ -13,6 +13,7 @@ from pathlib import Path
 import tempfile
 from datetime import datetime
 from typing import Dict, List, Any, Optional, Tuple
+from openpyxl import load_workbook
 
 class XLWingsGenerator:
     """
@@ -274,6 +275,148 @@ class XLWingsGenerator:
             results.append(result)
         
         return results
+    
+    def generate_questionnaires_to_zip(self, bdd_file, year, template_file, selected_indices, progress_callback=None):
+        """
+        Génère les questionnaires sélectionnés vers un ZIP avec xlwings
+        Compatible avec l'interface Streamlit existante
+        
+        Args:
+            bdd_file: Fichier BDD Excel
+            year: Année à traiter 
+            template_file: Fichier template
+            selected_indices: Liste des indices des questionnaires à générer
+            progress_callback: Callback pour la progression
+            
+        Returns:
+            dict: Résultat avec zip_data et statistiques
+        """
+        import zipfile
+        import io
+        import tempfile
+        from openpyxl import load_workbook
+        
+        try:
+            # Lire les données de l'année depuis le fichier BDD (avec openpyxl pour la lecture)
+            all_data = self._read_year_data_from_bdd(bdd_file, year)
+            
+            if not all_data:
+                return {'success': False, 'error': f'Aucune donnée trouvée pour l\'année {year}'}
+            
+            # Filtrer selon les indices sélectionnés
+            selected_data = [all_data[i] for i in selected_indices if i < len(all_data)]
+            
+            if not selected_data:
+                return {'success': False, 'error': 'Aucun questionnaire sélectionné valide'}
+            
+            # Créer un buffer ZIP en mémoire
+            zip_buffer = io.BytesIO()
+            generated_count = 0
+            failed_count = 0
+            
+            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for i, data_row in enumerate(selected_data):
+                    if progress_callback:
+                        locataire = data_row.get('locataire', f'Questionnaire {i+1}')
+                        progress_callback(i, len(selected_data), f"Génération {locataire}")
+                    
+                    try:
+                        # Créer un fichier temporaire pour ce questionnaire
+                        with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as temp_file:
+                            temp_path = temp_file.name
+                        
+                        # Utiliser xlwings pour générer le questionnaire
+                        result = self.generate_single_questionnaire(template_file, data_row, temp_path)
+                        
+                        if result.get('success', False):
+                            # Créer la structure de dossiers
+                            ville = data_row.get('ville', '')
+                            adresse = data_row.get('adresse', '')
+                            locataire = data_row.get('locataire', '')
+                            folder_structure = f"{ville} - {adresse} - {locataire}"
+                            filename = self._create_zip_filename(data_row, year, folder_structure)
+                            
+                            # Ajouter au ZIP
+                            zipf.write(temp_path, filename)
+                            generated_count += 1
+                        else:
+                            failed_count += 1
+                        
+                        # Nettoyer le fichier temporaire
+                        try:
+                            os.unlink(temp_path)
+                        except:
+                            pass
+                            
+                    except Exception as e:
+                        failed_count += 1
+                        print(f"Erreur xlwings pour {data_row.get('locataire', 'Unknown')}: {e}")
+            
+            # Progression finale
+            if progress_callback:
+                progress_callback(len(selected_data), len(selected_data), "Génération terminée avec xlwings")
+            
+            # Retourner les données ZIP
+            zip_data = zip_buffer.getvalue()
+            
+            return {
+                'success': True,
+                'zip_data': zip_data,
+                'generated_count': generated_count,
+                'failed_count': failed_count,
+                'total_processed': len(selected_data),
+                'total_available': len(all_data)
+            }
+            
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+    
+    def _read_year_data_from_bdd(self, bdd_file, year):
+        """Lit les données d'une année depuis le fichier BDD"""
+        try:
+            wb = load_workbook(bdd_file, data_only=True)
+            if year not in wb.sheetnames:
+                return []
+                
+            ws = wb[year]
+            data = []
+            
+            for row in range(10, ws.max_row + 1):  # Commence ligne 10
+                # Colonne O = nom du dossier (colonne 15)
+                folder_name = ws.cell(row=row, column=15).value
+                if not folder_name or str(folder_name).strip() == '':
+                    continue
+                
+                # Extraire les données selon votre structure
+                data_row = {
+                    'numero_identification': ws.cell(row=row, column=1).value,
+                    'locataire': ws.cell(row=row, column=6).value,
+                    'adresse': ws.cell(row=row, column=4).value,
+                    'ville': ws.cell(row=row, column=5).value,
+                    'folder_name': folder_name,
+                    'row_number': row
+                }
+                
+                # Ajouter toutes les colonnes pour compatibilité
+                for col in range(1, ws.max_column + 1):
+                    cell_value = ws.cell(row=row, column=col).value
+                    data_row[f'col_{col}'] = cell_value
+                
+                data.append(data_row)
+            
+            wb.close()
+            return data
+            
+        except Exception as e:
+            print(f"Erreur lecture BDD: {e}")
+            return []
+    
+    def _create_zip_filename(self, data_row, year, folder_structure):
+        """Crée le nom de fichier pour le ZIP"""
+        locataire = data_row.get('locataire', 'Unknown')
+        safe_locataire = "".join(c for c in locataire if c.isalnum() or c in (' ', '-', '_')).strip()
+        filename = f"{folder_structure}/ESG_{safe_locataire}_{year}.xlsx"
+        return filename
     
     def _create_filename(self, data_row: Any, index: int) -> str:
         """
