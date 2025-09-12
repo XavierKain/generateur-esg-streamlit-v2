@@ -3,6 +3,7 @@
 """
 MODULE GÉNÉRATION QUESTIONNAIRES - Version Streamlit
 Adapté de generateur_2025.py pour fonctionner avec Streamlit
+Intègre la solution xlwings pour préserver le formatage conditionnel
 """
 
 import os
@@ -15,6 +16,14 @@ import warnings
 import zipfile
 import io
 import tempfile
+
+# Import du générateur xlwings
+try:
+    from xlwings_generator import XLWingsGenerator
+    XLWINGS_AVAILABLE = True
+except ImportError:
+    XLWINGS_AVAILABLE = False
+    XLWingsGenerator = None
 
 # FORMULES TEMPLATE INTÉGRÉES - Plus besoin du fichier COPIE.xlsm !
 TEMPLATE_FORMULAS = {
@@ -426,11 +435,178 @@ def generate_questionnaires_for_year_to_zip(bdd_file, year, template_file, progr
         return {'success': False, 'error': str(e)}
 
 
-def generate_single_questionnaire_to_file(template_file, output_path, data, bdd_file, year):
+def generate_single_questionnaire_to_file(template_file, output_path, data, bdd_file, year, enable_vba_formatting=True, enable_xlwings=True):
     """
     Générer un questionnaire vers un fichier spécifique
-    Version optimisée pour la génération ZIP
+    Version avec support xlwings pour préservation parfaite du formatage
+    
+    Args:
+        template_file: Chemin vers le template Excel
+        output_path: Chemin de sortie souhaité  
+        data: Données du questionnaire
+        bdd_file: Fichier de base de données
+        year: Année
+        enable_vba_formatting: Activer le formatage VBA/openpyxl
+        enable_xlwings: Activer xlwings (priorité si disponible)
     """
+    
+    # Tentative avec xlwings en priorité si activé
+    if enable_xlwings and XLWINGS_AVAILABLE:
+        try:
+            xlwings_gen = XLWingsGenerator()
+            available, status = xlwings_gen.is_available()
+            
+            if available:
+                # Préparer les données pour xlwings
+                xlwings_data = prepare_data_for_xlwings(data, bdd_file, year)
+                
+                # Générer avec xlwings
+                result = xlwings_gen.generate_single_questionnaire(
+                    template_file, 
+                    xlwings_data, 
+                    output_path
+                )
+                
+                if result["success"]:
+                    print(f"✅ Questionnaire généré avec xlwings: {output_path}")
+                    # Retourner un tuple pour compatibilité avec l'ancien code
+                    return True, result.get("message", "Questionnaire généré avec xlwings")
+                else:
+                    print(f"⚠️ xlwings a échoué: {result['error']}")
+                    print("🔄 Fallback vers méthode openpyxl...")
+            else:
+                print(f"⚠️ xlwings non disponible: {status}")
+                print("🔄 Utilisation de la méthode openpyxl...")
+                
+        except Exception as e:
+            print(f"⚠️ Erreur xlwings: {e}")
+            print("🔄 Fallback vers méthode openpyxl...")
+    
+    # Méthode openpyxl classique (fallback ou si xlwings désactivé)
+    return generate_single_questionnaire_to_file_openpyxl(
+        template_file, output_path, data, bdd_file, year, enable_vba_formatting
+    )
+
+
+def prepare_data_for_xlwings(data, bdd_file, year):
+    """
+    Prépare les données dans le format attendu par xlwings
+    
+    Args:
+        data: Données originales
+        bdd_file: Fichier BDD
+        year: Année
+        
+    Returns:
+        Dict avec les données formatées pour xlwings
+    """
+    try:
+        # Charger les données de la BDD pour cette ligne
+        wb_source = load_workbook(bdd_file, data_only=True)
+        ws_source = wb_source[year]
+        
+        # Extraire toutes les données de la ligne
+        row_data = {}
+        
+        # Données de base
+        row_data.update({
+            'nom_locataire': data.get('locataire', ''),
+            'adresse': data.get('adresse_complete', ''),
+            'ville': data.get('ville', ''),
+            'code_postal': data.get('code_postal', ''),
+            'contact': data.get('contact', ''),
+            'telephone': data.get('telephone', ''),
+            'email': data.get('email', ''),
+            'date': datetime.datetime.now().strftime('%Y %m %d'),
+            'reference': data.get('reference', ''),
+            'reponse_certifiee': data.get('reponse_certifiee', '')
+        })
+        
+        # Extraire les scores et données de la BDD
+        if 'row_number' in data:
+            row_num = data['row_number']
+            
+            # Parcourir toutes les colonnes pour extraire les données
+            for col_idx in range(1, ws_source.max_column + 1):
+                try:
+                    cell_value = ws_source.cell(row=row_num, column=col_idx).value
+                    col_letter = get_column_letter(col_idx)
+                    row_data[f'col_{col_letter}'] = cell_value
+                except:
+                    continue
+        
+        wb_source.close()
+        return row_data
+        
+    except Exception as e:
+        print(f"Erreur préparation données xlwings: {e}")
+        # Retourner au minimum les données de base
+        return {
+            'nom_locataire': data.get('locataire', ''),
+            'adresse': data.get('adresse_complete', ''),
+            'date': datetime.datetime.now().strftime('%Y %m %d')
+        }
+
+
+def generate_single_questionnaire_to_file_openpyxl(template_file, output_path, data, bdd_file, year, enable_vba_formatting=True):
+    """
+    Générer un questionnaire avec openpyxl (méthode classique)
+    Version renommée de la fonction originale
+    """
+    try:
+        # Copier le template vers le fichier de sortie
+        shutil.copy2(template_file, output_path)
+        
+        # Charger et modifier le workbook
+        wb = load_workbook(output_path)
+        
+        # Pré-remplir les données spéciales
+        if 'Questionnaire ESG' in wb.sheetnames:
+            ws_questionnaire = wb['Questionnaire ESG']
+            try:
+                # Locataire en B11
+                ws_questionnaire['B11'] = data['locataire']
+                # Adresse en B8
+                ws_questionnaire['B8'] = data['adresse_complete']
+                # Réponse certifiée en A22
+                if data['reponse_certifiee']:
+                    ws_questionnaire['A22'] = data['reponse_certifiee']
+            except Exception:
+                pass
+        
+        # Utiliser le système de mapping des formules
+        wb_source = load_workbook(bdd_file, data_only=True)
+        ws_source = wb_source[year]
+        
+        updates_count = 0
+        for col_letter, formula in TEMPLATE_FORMULAS.items():
+            cell_info = extract_cell_references(formula)
+            
+            if cell_info:
+                sheet_name, cell_ref = cell_info
+                try:
+                    # Lire la valeur depuis la source
+                    col_num = column_index_from_string(col_letter)
+                    source_value = ws_source.cell(row=data['row_number'], column=col_num).value
+                    
+                    if source_value is not None and str(source_value).strip() != '':
+                        # Écrire dans le questionnaire
+                        if sheet_name in wb.sheetnames:
+                            ws_target = wb[sheet_name]
+                            ws_target[cell_ref] = source_value
+                            updates_count += 1
+                        
+                except Exception:
+                    continue
+        
+        wb_source.close()
+        wb.save(output_path)
+        wb.close()
+        
+        return True, f"Questionnaire généré avec {updates_count} valeurs (openpyxl)"
+        
+    except Exception as e:
+        return False, f"Erreur lors de la génération: {str(e)}"
     try:
         # Copier le template vers le fichier de sortie
         shutil.copy2(template_file, output_path)

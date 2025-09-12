@@ -599,6 +599,9 @@ def generate_questionnaires():
     status_text = st.empty()
     
     try:
+        # Import du module de génération
+        from generateur_2025_streamlit import generate_selected_questionnaires_to_zip
+        
         # Paramètres
         bdd_file = st.session_state.uploaded_bdd_file
         template_file = st.session_state.uploaded_template_file
@@ -611,35 +614,11 @@ def generate_questionnaires():
         
         st.info(f"📁 Génération de {len(selected_indices)} questionnaire(s) sélectionné(s) pour l'année {year}")
         
-        # Vérifier la disponibilité d'xlwings
-        xlwings_gen = XLWingsGenerator()
-        xlwings_available, xlwings_msg = xlwings_gen.is_available()
-        
-        if xlwings_available:
-            status_text.text("🎨 Utilisation d'xlwings pour préserver le formatage conditionnel...")
-            st.success("🚀 **xlwings activé** - Formatage conditionnel préservé !")
-            
-            # Utiliser xlwings
-            result = xlwings_gen.generate_questionnaires_to_zip(
-                bdd_file=bdd_file,
-                year=year,
-                template_file=template_file,
-                selected_indices=selected_indices,
-                progress_callback=lambda current, total, message: update_progress(progress_bar, status_text, current, total, message)
-            )
-        else:
-            status_text.text("🔧 xlwings indisponible - utilisation d'openpyxl...")
-            st.warning(f"⚠️ **xlwings indisponible** : {xlwings_msg}")
-            st.warning("🔧 **Fallback openpyxl** - Formatage conditionnel non préservé")
-            
-            # Import du module de génération openpyxl
-            from generateur_2025_streamlit import generate_selected_questionnaires_to_zip
-            
-            # Générer directement en ZIP les questionnaires sélectionnés avec openpyxl
-            result = generate_selected_questionnaires_to_zip(
-                bdd_file, year, template_file, selected_indices,
-                progress_callback=lambda current, total, message: update_progress(progress_bar, status_text, current, total, message)
-            )
+        # Générer directement en ZIP les questionnaires sélectionnés
+        result = generate_selected_questionnaires_to_zip(
+            bdd_file, year, template_file, selected_indices,
+            progress_callback=lambda current, total, message: update_progress(progress_bar, status_text, current, total, message)
+        )
         
         if result['success']:
             st.session_state.generated_questionnaires = True
