@@ -19,6 +19,14 @@ from openpyxl import load_workbook
 import warnings
 from xlwings_generator import XLWingsGenerator
 
+# Chargement optionnel des variables d'environnement depuis .env
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    # dotenv n'est pas obligatoire
+    pass
+
 # Configuration de la page
 st.set_page_config(
     page_title="Générateur ESG - Simple",
@@ -300,17 +308,28 @@ def page_generation_config():
                     st.success(f"✅ {xlwings_msg}")
                     st.info("🎯 **Avantage** : Conserve 100% du formatage conditionnel")
                 else:
-                    st.error(f"❌ {xlwings_msg}")
+                    if "Linux" in xlwings_msg or "Streamlit Cloud" in xlwings_msg:
+                        st.info(f"ℹ️ {xlwings_msg}")
+                        st.info("☁️ **Normal** : xlwings nécessite Excel (Windows/macOS)")
+                    else:
+                        st.error(f"❌ {xlwings_msg}")
                     
             with col2:
                 st.markdown("**🔧 openpyxl (Fallback)**")
                 st.warning("⚠️ Formatage conditionnel perdu")
                 st.info("📝 Utilisé automatiquement si xlwings indisponible")
                 
+            # Message global adapté à l'environnement
             if xlwings_available:
                 st.success("🚀 **xlwings détecté** - Formatage conditionnel préservé !")
             else:
-                st.warning("⚠️ **xlwings indisponible** - Utilisation d'openpyxl (formatage basique)")
+                if "Linux" in xlwings_msg or "Streamlit Cloud" in xlwings_msg:
+                    st.info("☁️ **Environnement Cloud détecté** - Utilisation d'openpyxl (comportement normal)")
+                    st.info("💡 **Astuce** : Pour le formatage conditionnel, utilisez l'application en local (Windows/macOS)")
+                elif "FORCE_OPENPYXL" in xlwings_msg:
+                    st.info("⚙️ **openpyxl forcé** par configuration (variable FORCE_OPENPYXL)")
+                else:
+                    st.warning("⚠️ **xlwings indisponible** - Utilisation d'openpyxl (formatage basique)")
                 
         except Exception as e:
             st.error(f"❌ Erreur lors de la vérification xlwings: {e}")

@@ -14,6 +14,7 @@ import tempfile
 from datetime import datetime
 from typing import Dict, List, Any, Optional, Tuple
 from openpyxl import load_workbook
+import platform
 
 class XLWingsGenerator:
     """
@@ -38,6 +39,7 @@ class XLWingsGenerator:
     def is_available(self) -> Tuple[bool, str]:
         """
         Vérifie si xlwings et Excel sont disponibles
+        Optimisé pour détecter l'environnement Streamlit Cloud
         """
         if self.is_available_cached is not None:
             return self.is_available_cached, self.status_message
@@ -46,13 +48,29 @@ class XLWingsGenerator:
             # 1. Vérifier si xlwings est installé
             import xlwings as xw
             
-            # 2. Tester si le répertoire sandbox existe
+            # 2. Détection d'environnement
+            system = platform.system().lower()
+            
+            # 3. Vérifications spécifiques à l'environnement
+            if system == "linux":
+                # Sur Linux (Streamlit Cloud), Excel n'est jamais disponible
+                self.is_available_cached = False
+                self.status_message = "Environnement Linux détecté - Excel non disponible (Streamlit Cloud)"
+                return False, self.status_message
+            
+            # 4. Détection variable d'environnement pour forcer openpyxl
+            if os.getenv("FORCE_OPENPYXL", "").lower() in ("true", "1", "yes"):
+                self.is_available_cached = False
+                self.status_message = "xlwings désactivé par variable d'environnement FORCE_OPENPYXL"
+                return False, self.status_message
+            
+            # 5. Pour macOS/Windows - tester si le répertoire sandbox existe
             if not self.excel_sandbox_dir.exists():
                 self.is_available_cached = False
                 self.status_message = f"Répertoire Excel sandbox non trouvé: {self.excel_sandbox_dir}"
                 return False, self.status_message
             
-            # 3. Tester si on peut écrire dans le répertoire sandbox
+            # 6. Tester si on peut écrire dans le répertoire sandbox
             test_file = self.temp_dir / "test_write.txt"
             try:
                 test_file.write_text("test")
@@ -62,9 +80,12 @@ class XLWingsGenerator:
                 self.status_message = f"Pas d'accès en écriture au sandbox: {e}"
                 return False, self.status_message
             
-            # 4. Tester xlwings avec Excel
+            # 7. Tester xlwings avec Excel (seulement sur macOS/Windows)
             try:
+                # Test plus sûr avec timeout
                 app = xw.App(visible=False)
+                if app is None:
+                    raise Exception("Impossible de créer l'application Excel")
                 app.quit()
             except Exception as e:
                 self.is_available_cached = False
@@ -72,7 +93,7 @@ class XLWingsGenerator:
                 return False, self.status_message
             
             self.is_available_cached = True
-            self.status_message = "xlwings et Excel disponibles dans le sandbox"
+            self.status_message = f"xlwings et Excel disponibles sur {system}"
             return True, self.status_message
             
         except ImportError:

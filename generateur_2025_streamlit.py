@@ -475,12 +475,21 @@ def generate_single_questionnaire_to_file(template_file, output_path, data, bdd_
                     print(f"⚠️ xlwings a échoué: {result['error']}")
                     print("🔄 Fallback vers méthode openpyxl...")
             else:
-                print(f"⚠️ xlwings non disponible: {status}")
-                print("🔄 Utilisation de la méthode openpyxl...")
+                # Message plus informatif selon l'environnement
+                if "Linux" in status or "Streamlit Cloud" in status:
+                    print(f"ℹ️ xlwings non disponible sur cet environnement: {status}")
+                    print("🔄 Utilisation d'openpyxl (comportement normal sur Streamlit Cloud)")
+                else:
+                    print(f"⚠️ xlwings non disponible: {status}")
+                    print("🔄 Utilisation de la méthode openpyxl...")
                 
         except Exception as e:
-            print(f"⚠️ Erreur xlwings: {e}")
+            print(f"⚠️ Erreur xlwings inattendue: {e}")
             print("🔄 Fallback vers méthode openpyxl...")
+    elif not XLWINGS_AVAILABLE:
+        print("ℹ️ Module xlwings non importé - utilisation d'openpyxl")
+    else:
+        print("ℹ️ xlwings désactivé - utilisation d'openpyxl")
     
     # Méthode openpyxl classique (fallback ou si xlwings désactivé)
     return generate_single_questionnaire_to_file_openpyxl(
