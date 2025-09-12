@@ -17,6 +17,7 @@ from pathlib import Path
 import pandas as pd
 from openpyxl import load_workbook
 import warnings
+from xlwings_generator import XLWingsGenerator
 
 # Configuration de la page
 st.set_page_config(
@@ -284,6 +285,35 @@ def page_generation_config():
         st.rerun()
     
     st.write(f"**Année sélectionnée :** {st.session_state.selected_year}")
+    
+    # Status xlwings - section informative
+    st.markdown("**🔧 Status du système de formatage :**")
+    with st.expander("ℹ️ Informations sur les moteurs de formatage", expanded=False):
+        try:
+            xlwings_gen = XLWingsGenerator()
+            xlwings_available, xlwings_msg = xlwings_gen.is_available()
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("**🎨 xlwings (Recommandé)**")
+                if xlwings_available:
+                    st.success(f"✅ {xlwings_msg}")
+                    st.info("🎯 **Avantage** : Conserve 100% du formatage conditionnel")
+                else:
+                    st.error(f"❌ {xlwings_msg}")
+                    
+            with col2:
+                st.markdown("**🔧 openpyxl (Fallback)**")
+                st.warning("⚠️ Formatage conditionnel perdu")
+                st.info("📝 Utilisé automatiquement si xlwings indisponible")
+                
+            if xlwings_available:
+                st.success("🚀 **xlwings détecté** - Formatage conditionnel préservé !")
+            else:
+                st.warning("⚠️ **xlwings indisponible** - Utilisation d'openpyxl (formatage basique)")
+                
+        except Exception as e:
+            st.error(f"❌ Erreur lors de la vérification xlwings: {e}")
     
     # Prévisualisation des données et sélection des questionnaires
     with st.expander("📊 Prévisualiser et sélectionner les questionnaires à générer", expanded=True):
@@ -569,9 +599,6 @@ def generate_questionnaires():
     status_text = st.empty()
     
     try:
-        # Import du module de génération
-        from generateur_2025_streamlit import generate_selected_questionnaires_to_zip
-        
         # Paramètres
         bdd_file = st.session_state.uploaded_bdd_file
         template_file = st.session_state.uploaded_template_file
@@ -584,11 +611,35 @@ def generate_questionnaires():
         
         st.info(f"📁 Génération de {len(selected_indices)} questionnaire(s) sélectionné(s) pour l'année {year}")
         
-        # Générer directement en ZIP les questionnaires sélectionnés
-        result = generate_selected_questionnaires_to_zip(
-            bdd_file, year, template_file, selected_indices,
-            progress_callback=lambda current, total, message: update_progress(progress_bar, status_text, current, total, message)
-        )
+        # Vérifier la disponibilité d'xlwings
+        xlwings_gen = XLWingsGenerator()
+        xlwings_available, xlwings_msg = xlwings_gen.is_available()
+        
+        if xlwings_available:
+            status_text.text("🎨 Utilisation d'xlwings pour préserver le formatage conditionnel...")
+            st.success("🚀 **xlwings activé** - Formatage conditionnel préservé !")
+            
+            # Utiliser xlwings
+            result = xlwings_gen.generate_questionnaires_to_zip(
+                bdd_file=bdd_file,
+                year=year,
+                template_file=template_file,
+                selected_indices=selected_indices,
+                progress_callback=lambda current, total, message: update_progress(progress_bar, status_text, current, total, message)
+            )
+        else:
+            status_text.text("🔧 xlwings indisponible - utilisation d'openpyxl...")
+            st.warning(f"⚠️ **xlwings indisponible** : {xlwings_msg}")
+            st.warning("🔧 **Fallback openpyxl** - Formatage conditionnel non préservé")
+            
+            # Import du module de génération openpyxl
+            from generateur_2025_streamlit import generate_selected_questionnaires_to_zip
+            
+            # Générer directement en ZIP les questionnaires sélectionnés avec openpyxl
+            result = generate_selected_questionnaires_to_zip(
+                bdd_file, year, template_file, selected_indices,
+                progress_callback=lambda current, total, message: update_progress(progress_bar, status_text, current, total, message)
+            )
         
         if result['success']:
             st.session_state.generated_questionnaires = True
