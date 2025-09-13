@@ -1,0 +1,32 @@
+# 📦 Générateur ESG - Package de Distribution
+
+**Package créé le :** 13/09/2025 à 14:24:29
+
+## 🚀 Installation et Utilisation
+
+### Windows 🪟
+1. Extraire le fichier ZIP
+2. Double-cliquer sur `Générateur_ESG.bat`
+3. L'interface graphique s'ouvre automatiquement
+
+### macOS 🍎
+1. Extraire le fichier ZIP
+2. Double-cliquer sur `Générateur_ESG.command`
+3. Ou utiliser `Générateur ESG.app` pour une expérience native
+
+## 📋 Prérequis
+- Python 3.7+ installé sur le système
+- Excel (optionnel, pour le formatage conditionnel optimal)
+
+## 🔧 Fonctionnalités
+- Interface graphique intuitive
+- Installation automatique des dépendances
+- xlwings pour formatage conditionnel (quand Excel disponible)
+- Fallback openpyxl automatique
+- Traitement 100% local et confidentiel
+
+## 📚 Documentation
+Consultez `README_UTILISATEUR.md` pour le guide complet.
+
+---
+**Version :** 1.0 - Distribution autonome
