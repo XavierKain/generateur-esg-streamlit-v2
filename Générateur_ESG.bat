@@ -12,20 +12,46 @@ echo =====================================
 echo.
 
 :: Vérifier si Python est installé
-python --version >nul 2>&1
-if %errorlevel% neq 0 (
-    echo ❌ ERREUR: Python n'est pas installé ou pas dans le PATH
-    echo.
-    echo 📥 Veuillez installer Python depuis https://python.org
-    echo ⚠️  IMPORTANT: Cochez "Add to PATH" lors de l'installation
-    echo.
-    pause
-    exit /b 1
+where python >nul 2>&1
+if %errorlevel% == 0 (
+    set PYTHON_CMD=python
+) else (
+    where python3 >nul 2>&1
+    if %errorlevel% == 0 (
+        set PYTHON_CMD=python3
+    ) else (
+        echo ❌ ERREUR: Python n'est pas installé ou pas dans le PATH
+        echo.
+        echo 📥 Veuillez installer Python depuis https://python.org
+        echo ⚠️  IMPORTANT: Cochez "Add to PATH" lors de l'installation
+        echo.
+        pause
+        exit /b 1
+    )
 )
 
-:: Afficher la version de Python
-for /f "tokens=2" %%i in ('python --version 2^>^&1') do set PYTHON_VERSION=%%i
-echo ✅ Python %PYTHON_VERSION% détecté
+:: Vérifier s'il y a un environnement virtuel
+set VENV_PYTHON=
+if exist "..\\.venv\\Scripts\\python.exe" (
+    set VENV_PYTHON=..\.venv\Scripts\python.exe
+    echo ✅ Environnement virtuel détecté
+) else if exist ".venv\\Scripts\\python.exe" (
+    set VENV_PYTHON=.venv\Scripts\python.exe
+    echo ✅ Environnement virtuel détecté
+) else if exist "venv\\Scripts\\python.exe" (
+    set VENV_PYTHON=venv\Scripts\python.exe
+    echo ✅ Environnement virtuel détecté
+)
+
+:: Utiliser l'environnement virtuel si disponible
+if defined VENV_PYTHON (
+    set PYTHON_CMD=%VENV_PYTHON%
+    for /f "tokens=2" %%v in ('"%PYTHON_CMD%" --version 2^>^&1') do set PYTHON_VERSION=%%v
+    echo ✅ Python %PYTHON_VERSION% ^(venv^)
+) else (
+    for /f "tokens=2" %%v in ('"%PYTHON_CMD%" --version 2^>^&1') do set PYTHON_VERSION=%%v
+    echo ✅ Python %PYTHON_VERSION% ^(système^)
+)
 
 :: Aller dans le répertoire du script
 cd /d "%~dp0"
@@ -36,7 +62,7 @@ echo 🚀 Lancement de l'application...
 echo.
 
 :: Lancer le script Python
-python launch_app.py
+"%PYTHON_CMD%" launch_app.py
 
 :: Si le script Python échoue, essayer le mode de compatibilité
 if %errorlevel% neq 0 (
@@ -46,11 +72,11 @@ if %errorlevel% neq 0 (
     
     :: Installation des dépendances
     echo 📦 Installation des dépendances...
-    python -m pip install streamlit openpyxl xlwings pandas --quiet
+    "%PYTHON_CMD%" -m pip install streamlit openpyxl xlwings pandas --quiet
     
     :: Lancement direct de Streamlit
     echo 🚀 Lancement direct de Streamlit...
-    python -m streamlit run app.py --server.port=8501 --browser.gatherUsageStats=false
+    "%PYTHON_CMD%" -m streamlit run app.py --server.port=8501 --browser.gatherUsageStats=false
 )
 
 pause

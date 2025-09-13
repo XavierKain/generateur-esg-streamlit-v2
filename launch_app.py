@@ -29,6 +29,9 @@ class StreamlitLauncher:
         self.port = 8501
         self.url = f"http://localhost:{self.port}"
         
+        # Déterminer l'exécutable Python à utiliser
+        self.python_executable = self.find_python_executable()
+        
         # Interface graphique
         self.root = tk.Tk()
         self.root.title("Générateur ESG - Streamlit")
@@ -43,6 +46,23 @@ class StreamlitLauncher:
         self.progress_var = tk.DoubleVar()
         
         self.setup_ui()
+    
+    def find_python_executable(self):
+        """Trouver le bon exécutable Python à utiliser"""
+        # D'abord essayer l'environnement virtuel local
+        script_dir = Path(__file__).parent
+        possible_venvs = [
+            script_dir.parent / ".venv" / "bin" / "python",  # Environnement virtuel un niveau au-dessus
+            script_dir / ".venv" / "bin" / "python",        # Environnement virtuel local
+            script_dir / "venv" / "bin" / "python",         # Autre nom d'environnement virtuel
+        ]
+        
+        for venv_python in possible_venvs:
+            if venv_python.exists():
+                return str(venv_python)
+        
+        # Sinon utiliser l'exécutable Python actuel
+        return sys.executable
         
     def center_window(self):
         """Centrer la fenêtre sur l'écran"""
@@ -86,7 +106,8 @@ class StreamlitLauncher:
         
         system_info = f"💻 Système: {platform.system()} {platform.release()}\n"
         system_info += f"🐍 Python: {sys.version.split()[0]}\n"
-        system_info += f"📁 Dossier: {Path(__file__).parent.name}"
+        system_info += f"📁 Dossier: {Path(__file__).parent.name}\n"
+        system_info += f"⚙️ Exécutable: {Path(self.python_executable).name}"
         
         info_label = tk.Label(info_frame, text=system_info, justify=tk.LEFT, font=("Courier", 9))
         info_label.pack(anchor=tk.W)
@@ -175,7 +196,7 @@ class StreamlitLauncher:
             requirements_path = Path(__file__).parent / "requirements.txt"
             if requirements_path.exists():
                 subprocess.check_call([
-                    sys.executable, "-m", "pip", "install", "-r", str(requirements_path), "--quiet"
+                    self.python_executable, "-m", "pip", "install", "-r", str(requirements_path), "--quiet"
                 ])
                 self.update_status("✅ Dépendances installées")
             else:
@@ -183,7 +204,7 @@ class StreamlitLauncher:
                 packages = ["streamlit", "openpyxl", "xlwings", "pandas"]
                 for package in packages:
                     subprocess.check_call([
-                        sys.executable, "-m", "pip", "install", package, "--quiet"
+                        self.python_executable, "-m", "pip", "install", package, "--quiet"
                     ])
                 self.update_status("✅ Packages essentiels installés")
         except Exception as e:
@@ -223,13 +244,13 @@ class StreamlitLauncher:
         try:
             # Lancer Streamlit
             self.process = subprocess.Popen([
-                sys.executable, "-m", "streamlit", "run", "app.py",
+                self.python_executable, "-m", "streamlit", "run", "app.py",
                 f"--server.port={self.port}",
                 "--server.address=localhost",
                 "--browser.gatherUsageStats=false",
                 "--server.headless=true",
                 "--logger.level=error"
-            ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             
             # Attendre que le serveur démarre
             self.update_progress(90)
@@ -241,7 +262,10 @@ class StreamlitLauncher:
                 self.update_progress(100)
                 return True
             else:
-                self.update_status("❌ Échec du démarrage de Streamlit")
+                # Récupérer les erreurs
+                stdout, stderr = self.process.communicate()
+                error_msg = stderr.strip() if stderr else "Erreur inconnue"
+                self.update_status(f"❌ Échec du démarrage: {error_msg}")
                 return False
                 
         except Exception as e:

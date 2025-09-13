@@ -28,17 +28,39 @@ command_exists() {
 if command_exists python3; then
     PYTHON_CMD="python3"
     PYTHON_VERSION=$(python3 --version 2>&1 | cut -d' ' -f2)
-    echo -e "${GREEN}✅ Python $PYTHON_VERSION détecté${NC}"
 elif command_exists python; then
     PYTHON_CMD="python"
     PYTHON_VERSION=$(python --version 2>&1 | cut -d' ' -f2)
-    echo -e "${GREEN}✅ Python $PYTHON_VERSION détecté${NC}"
 else
     echo -e "${RED}❌ Python n'est pas installé${NC}"
     echo "📥 Veuillez installer Python depuis https://python.org"
     echo
     read -p "Appuyez sur Entrée pour fermer..."
     exit 1
+fi
+
+# Vérifier s'il y a un environnement virtuel
+VENV_PYTHON=""
+if [ -f "../.venv/bin/python" ]; then
+    VENV_PYTHON="../.venv/bin/python"
+    echo -e "${GREEN}✅ Environnement virtuel détecté${NC}"
+elif [ -f ".venv/bin/python" ]; then
+    VENV_PYTHON=".venv/bin/python"
+    echo -e "${GREEN}✅ Environnement virtuel détecté${NC}"
+elif [ -f "venv/bin/python" ]; then
+    VENV_PYTHON="venv/bin/python"
+    echo -e "${GREEN}✅ Environnement virtuel détecté${NC}"
+else
+    echo -e "${GREEN}✅ Python $PYTHON_VERSION détecté${NC}"
+fi
+
+# Utiliser l'environnement virtuel si disponible
+if [ ! -z "$VENV_PYTHON" ]; then
+    PYTHON_CMD="$VENV_PYTHON"
+    PYTHON_VERSION=$($PYTHON_CMD --version 2>&1 | cut -d' ' -f2)
+    echo -e "${GREEN}✅ Python $PYTHON_VERSION (venv)${NC}"
+else
+    echo -e "${GREEN}✅ Python $PYTHON_VERSION (système)${NC}"
 fi
 
 echo
